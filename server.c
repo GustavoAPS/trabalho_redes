@@ -10,6 +10,95 @@
 #include <sys/types.h>
 #include <signal.h>
 
+
+
+
+//------------------------------------------------------------------------------------------------
+
+
+
+#define MAX_CHATROOMS 10
+#define MAX_PARTICIPANTS 10
+
+// Definição da struct chatroom
+typedef struct {
+    char name[50];
+    int num_participants;
+    char participants[MAX_PARTICIPANTS][50];
+} chatroom;
+
+
+    chatroom* chatrooms[MAX_CHATROOMS] = { NULL };
+    int num_chatrooms = 0;
+
+// Função para criar uma nova chatroom
+chatroom* create_chatroom(const char* name) {
+    chatroom* new_chatroom = (chatroom*)malloc(sizeof(chatroom));
+    if (new_chatroom != NULL) {
+        strncpy(new_chatroom->name, name, sizeof(new_chatroom->name));
+        new_chatroom->name[sizeof(new_chatroom->name) - 1] = '\0'; // Garantir terminação nula
+        new_chatroom->num_participants = 0;
+        printf("Chatroom '%s' created.\n", new_chatroom->name);
+    } else {
+        printf("Failed to create chatroom.\n");
+    }
+    return new_chatroom;
+}
+
+// Função para adicionar um participante à chatroom pelo nome
+void add_participant(chatroom* room, const char* participant_name) {
+    if (room->num_participants < MAX_PARTICIPANTS) {
+        strncpy(room->participants[room->num_participants], participant_name, sizeof(room->participants[0]));
+        room->participants[room->num_participants][sizeof(room->participants[0]) - 1] = '\0'; // Garantir terminação nula
+        room->num_participants++;
+        printf("Participant '%s' added to chatroom '%s'.\n", participant_name, room->name);
+    } else {
+        printf("Chatroom is already full.\n");
+    }
+}
+
+// Função para listar as chatrooms existentes
+char* list_chatrooms(chatroom* chatrooms[], int num_chatrooms) {
+    char* result = (char*)malloc(1024 * sizeof(char)); // Aloca espaço para a string de resultado
+    if (result == NULL) {
+        perror("Error allocating memory");
+        exit(EXIT_FAILURE);
+    }
+
+    if (num_chatrooms == 0) {
+        sprintf(result, "No chatrooms found.\n");
+    } else {
+        sprintf(result, "List of chatrooms:\n");
+        char temp[256];
+        for (int i = 0; i < num_chatrooms; i++) {
+            if (chatrooms[i] != NULL) {
+                sprintf(temp, "%d. %s (%d participants)\n", i + 1, chatrooms[i]->name, chatrooms[i]->num_participants);
+                strcat(result, temp);
+            }
+        }
+    }
+
+    return result;
+}
+
+// Função para apagar chatroom
+void delete_chatroom(chatroom* room) {
+    if (room != NULL) {
+        free(room);
+        printf("Chatroom has been deleted.\n");
+    } else {
+        printf("Chatroom is already empty.\n");
+    }
+}
+
+
+
+//------------------------------------------------------------------------------------------------
+
+
+
+
+
 #define MAX_CLIENTS 100
 #define MAX_CHATROOMS 10
 #define BUFFER_SIZE 2048
@@ -105,25 +194,138 @@ void queue_remove(int uid){
 /* Send message to all clients except sender */
 void send_message(char *s, int uid){
 
+	
+    char word1[50], word2[50], word3[50];
+
+    int num_items = sscanf(s, "%[^:]: %s %s", word1, word2, word3);
+
+    if (num_items == 2) {
+        // Se apenas duas palavras foram lidas, a terceira palavra é opcional e podemos atribuir um valor padrão.
+        strcpy(word3, "default_value");
+    }
+
+    printf("\nPalavra 1: %s\n", word1);
+    printf("Palavra 2: %s\n", word2);
+    printf("Palavra 3: %s\n\n", word3);
 
 	if (strstr(s, "/list") != NULL)
 	{
 		printf("**LIST CHATROOMS**\n");
+
+		//list_chatrooms(chatrooms, num_chatrooms);
+		char* list_output = list_chatrooms(chatrooms, num_chatrooms);
+    	printf("%s", list_output);
+    	// Lembre-se de liberar a memória alocada para a string de resultado após o uso.
+
+		pthread_mutex_lock(&clients_mutex);
+
+		for(int i=0; i<MAX_CLIENTS; ++i){
+			if(clients[i]){
+				if(clients[i]->uid == uid){
+					if(write(clients[i]->sockfd, list_output, strlen(list_output)) < 0)
+					{
+						perror("ERROR: write to descriptor failed");
+						break;
+					}
+				}
+			}
+		}
+    	free(list_output);
+
+		pthread_mutex_unlock(&clients_mutex);
+
+
 	}
 
+	//  Identifica o comando create
 	if (strstr(s, "/create") != NULL)
 	{
-		printf("**CREATE CHATROOM**\n");
+		if (num_chatrooms < MAX_CHATROOMS) 
+		{
+			word3[strcspn(word3, "\n")] = '\0'; // Remover o caractere de nova linha
+
+			// Verificar se a chatroom com o mesmo nome já existe
+			int found = 0;
+			for (int i = 0; i < num_chatrooms; i++) 
+			{
+				if (chatrooms[i] != NULL && strcmp(chatrooms[i]->name, word3) == 0) 
+				{
+					found = 1;
+					printf("Chatroom '%s' already exists.\n", word3);
+					break;
+				}
+			}
+
+			if (!found) 
+			{
+				chatroom* new_room = create_chatroom(word3);
+				if (new_room != NULL) {
+					chatrooms[num_chatrooms] = new_room;
+					num_chatrooms++;
+				}
+			}
+		} else 
+		{
+			printf("Maximum number of chatrooms reached.\n");
+		}
+	
 	}
 
 	if (strstr(s, "/delete") != NULL)
 	{
-		printf("**DELETE CHATROOM**\n");
+		if (num_chatrooms == 0) {
+			printf("No chatrooms found.\n");
+		} else {
+			
+			word3[strcspn(word3, "\n")] = '\0'; // Remover o caractere de nova linha
+
+			// Procurar a chatroom com o nome fornecido
+			int found = 0;
+			for (int i = 0; i < num_chatrooms; i++) {
+				if (chatrooms[i] != NULL && strcmp(chatrooms[i]->name, word3) == 0) {
+					found = 1;
+					delete_chatroom(chatrooms[i]);
+					chatrooms[i] = NULL;
+					printf("Chatroom '%s' deleted.\n", word3);
+					break;
+				}
+			}
+
+			if (!found) {
+				printf("Chatroom '%s' not found.\n", word3);
+			}
+		}
 	}
 
 	if (strstr(s, "/join") != NULL)
 	{
-		printf("**JOIN CHATROOM**\n");
+		if (num_chatrooms == 0) {
+                printf("No chatrooms found.\n");
+            } else {
+                //char word3[50];
+                //printf("Enter chatroom name: ");
+                //fgets(word3, sizeof(word3), stdin);
+                word3[strcspn(word3, "\n")] = '\0'; // Remover o caractere de nova linha
+
+                // Procurar a chatroom com o nome fornecido
+                int found = 0;
+                for (int i = 0; i < num_chatrooms; i++) {
+                    if (chatrooms[i] != NULL && strcmp(chatrooms[i]->name, word3) == 0) {
+                        found = 1;
+                        //char "Gustavo"[50];
+                        //printf("Enter participant name: ");
+                        //fgets("Gustavo", sizeof("Gustavo"), stdin);
+                        //"Gustavo"[strcspn("Gustavo", "\n")] = '\0'; // Remover o caractere de nova linha
+
+                        add_participant(chatrooms[i], "Gustavo");
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    printf("Chatroom '%s' not found.\n", word3);
+                }
+            }
 	}
 
 	if (strstr(s, "/exit") != NULL)
@@ -145,6 +347,7 @@ void send_message(char *s, int uid){
 	}
 
 	pthread_mutex_unlock(&clients_mutex);
+
 }
 
 
@@ -175,10 +378,12 @@ void *handle_client(void *arg){
 		}
 
 		int receive = recv(cli->sockfd, buff_out, BUFFER_SIZE, 0);
-		if (receive > 0){
-			if(strlen(buff_out) > 0){
+		
+		if (receive > 0)
+		{
+			if(strlen(buff_out) > 0)
+			{
 				send_message(buff_out, cli->uid);
-
 				str_trim_lf(buff_out, strlen(buff_out));
 				printf("%s -> %s\n", buff_out, cli->name);
 			}
@@ -207,6 +412,10 @@ void *handle_client(void *arg){
 
 
 int main(int argc, char **argv){
+
+
+
+
 	if(argc != 2){
 		printf("Usage: %s <port>\n", argv[0]);
 		return EXIT_FAILURE;

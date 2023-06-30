@@ -114,18 +114,17 @@ int main(int argc, char **argv)
 
 	// Send name
 	send(sockfd, name, 32, 0);
-
-	printf("\n=== WELCOME TO THE CHATROOM LOBBY ===\n");
-	printf("                                     \n");
-	printf("Available commands are:              \n");
-	printf("                                     \n");
-	printf("command                              \n");
-	printf("/list                          | List rooms and users \n");
-	printf("/create <room name> <n_users>  | Create a new room    \n");
-	printf("/delete <room name>            | Delete a room        \n");
-	printf("/join <room name>              | Join a room          \n");
-	printf("/Exit                          | Exit current room    \n\n");
-
+    
+	printf("\n\n");
+	printf(" _______________________________________________________\n");
+	printf("|            WELCOME TO THE CHATROOM LOBBY              |\n");
+	printf("|_______________________________________________________|\n");
+	printf("| /list                          | List rooms and users |\n");
+	printf("| /create <room name>            | Create a new room    |\n");
+	printf("| /delete <room name>            | Delete a room        |\n");
+	printf("| /join <room name>              | Join a room          |\n");
+	printf("| /Exit                          | Exit current room    |\n");
+    printf("|________________________________|______________________|\n\n");
 
 
 	pthread_t send_msg_thread;
