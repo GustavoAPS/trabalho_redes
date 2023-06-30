@@ -112,6 +112,22 @@ void delete_chatroom(chatroom* room) {
     }
 }
 
+// Função para tirar participante da sala
+void remove_participant(chatroom* room, const char* participant_name) {
+    for (int i = 0; i < room->num_participants; i++) {
+        if (strcmp(room->participants[i], participant_name) == 0) {
+            // Remover o participante da sala
+            for (int j = i; j < room->num_participants - 1; j++) {
+                strcpy(room->participants[j], room->participants[j + 1]);
+            }
+            room->num_participants--;
+            printf("Participant '%s' removed from chatroom '%s'.\n", participant_name, room->name);
+            return;
+        }
+    }
+    printf("Participant '%s' not found in chatroom '%s'.\n", participant_name, room->name);
+}
+
 
 
 //------------------------------------------------------------------------------------------------
@@ -215,7 +231,7 @@ void send_message(char *s, int uid){
 
 	if (strstr(s, "/list") != NULL)
 	{
-		printf("**LIST CHATROOMS**\n");
+		printf("*LIST CHATROOMS*\n");
 
 		//list_chatrooms(chatrooms, num_chatrooms);
 		char* list_output = list_chatrooms(chatrooms, num_chatrooms);
@@ -325,7 +341,13 @@ void send_message(char *s, int uid){
 
 	if (strstr(s, "/exit") != NULL)
 	{
-		printf("**EXIT CHATROOM**\n");
+		// Remover o participante da sala
+		for (int i = 0; i < num_chatrooms; i++) {
+			if (chatrooms[i] != NULL) {
+				remove_participant(chatrooms[i], word1);
+			}
+		}
+		printf("*EXIT CHATROOM*\n");
 	}                              
 
 	pthread_mutex_lock(&clients_mutex);
