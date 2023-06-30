@@ -9,16 +9,37 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <signal.h>
+#include <stdbool.h>
 
-
-
-
-//------------------------------------------------------------------------------------------------
-
-
-
+#define MAX_CLIENTS 100
 #define MAX_CHATROOMS 10
+#define BUFFER_SIZE 2048
 #define MAX_PARTICIPANTS 10
+
+
+static _Atomic unsigned int cli_count = 0;
+static int uid = 10;
+
+
+
+/* Client struct */
+typedef struct{
+	struct sockaddr_in address;
+	int sockfd;
+	int uid;
+	char name[32];
+} client;
+
+
+
+/* Arrays for clients and chatrooms */
+client *clients[MAX_CLIENTS];
+
+
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+
 
 // Definição da struct chatroom
 typedef struct {
@@ -97,40 +118,6 @@ void delete_chatroom(chatroom* room) {
 
 
 
-
-
-#define MAX_CLIENTS 100
-#define MAX_CHATROOMS 10
-#define BUFFER_SIZE 2048
-
-static _Atomic unsigned int cli_count = 0;
-static int uid = 10;
-
-
-
-/* Client struct */
-typedef struct{
-	struct sockaddr_in address;
-	int sockfd;
-	int uid;
-	char name[32];
-} client;
-
-/* Chat room struct */
-typedef struct{
-	int current_number_of_users;
-	int users_capacity;
-	char name[32];
-} chat_room;
-
-/* Arrays for clients and chatrooms */
-client *clients[MAX_CLIENTS];
-chat_room *chat_rooms[MAX_CHATROOMS];
-
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-
-
 void str_overwrite_stdout() {
     printf("\r%s", "> ");
     fflush(stdout);
@@ -191,6 +178,24 @@ void queue_remove(int uid){
 }
 
 
+bool areNamesInSameChatroom(chatroom* chatrooms[], int num_chatrooms, const char name1[50], const char name2[50]) {
+    for (int i = 0; i < num_chatrooms; i++) {
+        if (chatrooms[i] != NULL) {
+            for (int j = 0; j < chatrooms[i]->num_participants; j++) {
+                if (strcmp(chatrooms[i]->participants[j], name1) == 0) {
+                    for (int k = 0; k < chatrooms[i]->num_participants; k++) {
+                        if (strcmp(chatrooms[i]->participants[k], name2) == 0) {
+                            return true; // Ambos os nomes estão na mesma chatroom
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return false; // Os nomes não estão na mesma chatroom
+}
+
+
 /* Send message to all clients except sender */
 void send_message(char *s, int uid){
 
@@ -204,9 +209,9 @@ void send_message(char *s, int uid){
         strcpy(word3, "default_value");
     }
 
-    printf("\nPalavra 1: %s\n", word1);
-    printf("Palavra 2: %s\n", word2);
-    printf("Palavra 3: %s\n\n", word3);
+    //printf("\nPalavra 1: %s\n", word1);
+    //printf("Palavra 2: %s\n", word2);
+    //printf("Palavra 3: %s\n\n", word3);
 
 	if (strstr(s, "/list") != NULL)
 	{
@@ -302,22 +307,12 @@ void send_message(char *s, int uid){
 		if (num_chatrooms == 0) {
                 printf("No chatrooms found.\n");
             } else {
-                //char word3[50];
-                //printf("Enter chatroom name: ");
-                //fgets(word3, sizeof(word3), stdin);
-                word3[strcspn(word3, "\n")] = '\0'; // Remover o caractere de nova linha
-
-                // Procurar a chatroom com o nome fornecido
+                word3[strcspn(word3, "\n")] = '\0';
                 int found = 0;
                 for (int i = 0; i < num_chatrooms; i++) {
                     if (chatrooms[i] != NULL && strcmp(chatrooms[i]->name, word3) == 0) {
                         found = 1;
-                        //char "Gustavo"[50];
-                        //printf("Enter participant name: ");
-                        //fgets("Gustavo", sizeof("Gustavo"), stdin);
-                        //"Gustavo"[strcspn("Gustavo", "\n")] = '\0'; // Remover o caractere de nova linha
-
-                        add_participant(chatrooms[i], "Gustavo");
+                        add_participant(chatrooms[i], word1);
                         break;
                     }
                 }
@@ -335,10 +330,15 @@ void send_message(char *s, int uid){
 
 	pthread_mutex_lock(&clients_mutex);
 
-	for(int i=0; i<MAX_CLIENTS; ++i){
-		if(clients[i]){
-			if(clients[i]->uid != uid){
-				if(write(clients[i]->sockfd, s, strlen(s)) < 0){
+	for(int i=0; i<MAX_CLIENTS; ++i)
+	{
+		if(clients[i])
+		{
+			bool result = areNamesInSameChatroom(chatrooms, num_chatrooms, clients[i]->name, word1);
+			if(result)
+			{
+				if(write(clients[i]->sockfd, s, strlen(s)) < 0)
+				{
 					perror("ERROR: write to descriptor failed");
 					break;
 				}
@@ -412,8 +412,6 @@ void *handle_client(void *arg){
 
 
 int main(int argc, char **argv){
-
-
 
 
 	if(argc != 2){
